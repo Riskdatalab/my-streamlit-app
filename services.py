@@ -64,10 +64,12 @@ class DataHarmonizationService:
         Submit harmonization request to the webhook
         """
         api_url = os.getenv("N8N_WEBHOOK_URL")  # Get the webhook url
-
-        # Prepare files
-        files = {"input_file": (input_file.name, input_file, "application/json")}
-
+       
+        if input_file.name.endswith(".xml"):
+            files = {"input_file": (input_file.name, input_file, "application/xml")}
+        else:
+            files = {"input_file": (input_file.name, input_file, "application/json")}
+        
         # Make the POST request
         response = requests.post(api_url, data=form_data, files=files, timeout=240)
         print("=====response::", response.json())
@@ -89,7 +91,7 @@ class DataHarmonizationService:
                 ]
             }
             result = list(self.schema_collection_data.find(query))
-
+            # print("result::", result)
             if result:
                 return {"status_code": 200, "response_data": result}
             time.sleep(10)
@@ -98,11 +100,14 @@ class DataHarmonizationService:
         try:
             query = {provider_name: {"$exists": True}}
             documents = list(self.schema_collection_keymap.find(query))
+            
             if documents:
                 return documents
             else:
+                print("No keymap data found for {provider_name}")
                 return f"No keymap data found for {provider_name}"
         except Exception as e:
+            print("Error fetching keymap data: {str(e)}")
             return f"Error fetching keymap data: {str(e)}"
 
     def fetch_data_from_target_schema(self, target_schema_version: str):
@@ -149,7 +154,9 @@ class DataHarmonizationService:
                 "_id": str(target_schema_id),
             }
             webhook_url = os.getenv("N8N_FINAL_WEBHOOK_URL")
+
             response = requests.post(webhook_url, json=payload)
+
             if response.status_code == 200:
                 return {"success": True, "data": response.json()}
             else:

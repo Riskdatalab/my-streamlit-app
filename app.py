@@ -4,7 +4,9 @@ import time
 
 import pandas as pd
 import streamlit as st
+import xmltodict
 from dotenv import load_dotenv
+
 from services import DataHarmonizationService
 
 load_dotenv()
@@ -106,6 +108,10 @@ def handle_form_submission(
         doc = docs[0]  # Use the first document
         st.success("KeyMap and Master Schema successfully generated!")
         keymap_data = service.fetch_keymap_data(provider_name)
+        if isinstance(keymap_data, str):
+            st.error("Something went wrong while fetching keymap data")
+            return
+
         df_keymap = pd.DataFrame(
             keymap_data[0][provider_name].items(), columns=["Source", "Target"]
         )
@@ -195,7 +201,7 @@ def show_editors_and_update(service, provider_name, target_schema_version):
         st.session_state.editor_version = 0
 
     st.markdown("## Edit Keymap & Target Schema")
-    # with st.form("edit_form", clear_on_submit=False):
+
     # Create two columns for side-by-side display
     col1, col2 = st.columns([0.7, 0.3])
 
@@ -207,7 +213,6 @@ def show_editors_and_update(service, provider_name, target_schema_version):
             num_rows="dynamic",
             on_change=lambda: st.session_state.df_keymap,
         )
-        # st.session_state.df_keymap = edited_keymap
 
     with col2:
         # Show Missing Keys table when generate_missing_key is true
@@ -231,7 +236,7 @@ def show_editors_and_update(service, provider_name, target_schema_version):
     updated_schema = fix_json_columns(
         edited_schema.to_dict("records"), ["constraints", "itemDefinition"]
     )
-    # st.session_state.df_data = edited_schema
+
     with st.form("edit_form", clear_on_submit=False, border=False):
         if st.form_submit_button(
             "Update in MongoDB",
@@ -332,7 +337,7 @@ def main():
         )
         initialize_session_state()
         input_file = st.file_uploader(
-            "Upload Input File", type=["json"], key="input_file"
+            "Upload Input File", type=["json", "xml"], key="input_file"
         )
         submit_button = st.form_submit_button("Submit")
 
@@ -350,10 +355,17 @@ def main():
                     input_file,
                 )
                 input_file.seek(0)
-                input_file_dict = json.load(input_file)
+                if input_file.name.endswith(".json"):
+                    input_file_dict = json.load(input_file)
+                elif input_file.name.endswith(".xml"):
+                    input_file_dict = xmltodict.parse(input_file.read())
+                    # Remove the root key if present (In case of xml)
+                    if isinstance(input_file_dict, dict) and len(input_file_dict) == 1:
+                        input_file_dict = next(iter(input_file_dict.values()))
+                else:
+                    st.error("Unsupported file type")
+                    return
                 st.session_state.input_file_data = input_file_dict
-        # except Exception as e:
-        #     st.error(f"An error occurred: {str(e)}")
         else:
             st.error("Please upload an input file")
 
